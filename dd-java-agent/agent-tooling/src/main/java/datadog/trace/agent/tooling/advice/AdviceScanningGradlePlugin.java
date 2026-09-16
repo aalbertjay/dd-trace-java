@@ -25,13 +25,13 @@ public class AdviceScanningGradlePlugin extends Plugin.ForElementMatcher {
   }
 
   private final File targetDirectory;
-  private final List<AdviceProcessor<?>> processors;
+  private final List<AdviceProcessor> processors;
 
   public AdviceScanningGradlePlugin(File targetDirectory) {
     this(targetDirectory, singletonList(new MuzzleGenerationProcessor()));
   }
 
-  AdviceScanningGradlePlugin(File targetDirectory, List<AdviceProcessor<?>> processors) {
+  AdviceScanningGradlePlugin(File targetDirectory, List<AdviceProcessor> processors) {
     super(concreteClass().and(extendsClass(named(InstrumenterModule.class.getName()))));
     this.targetDirectory = targetDirectory;
     this.processors = processors;
@@ -56,16 +56,10 @@ public class AdviceScanningGradlePlugin extends Plugin.ForElementMatcher {
 
     AdviceScanResult scanResult = AdviceScanner.scan(module, classFileLocator);
     AdviceProcessorContext context = new AdviceProcessorContext(module, targetDirectory);
-    for (AdviceProcessor<?> processor : processors) {
-      runProcessor(processor, scanResult, context);
+    for (AdviceProcessor processor : processors) {
+      processor.process(scanResult, context);
     }
     return builder;
-  }
-
-  private static <T> void runProcessor(
-      AdviceProcessor<T> processor, AdviceScanResult scanResult, AdviceProcessorContext context) {
-    T result = processor.process(scanResult, context);
-    context.putResult(processor.resultType(), result);
   }
 
   @Override

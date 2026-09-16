@@ -15,14 +15,9 @@ import java.util.Set;
 /**
  * Converts a neutral advice scan to references and emits the existing {@code $Muzzle} side class.
  */
-public final class MuzzleGenerationProcessor implements AdviceProcessor<Reference[]> {
+public final class MuzzleGenerationProcessor implements AdviceProcessor {
   @Override
-  public Class<Reference[]> resultType() {
-    return Reference[].class;
-  }
-
-  @Override
-  public Reference[] process(AdviceScanResult scanResult, AdviceProcessorContext context) {
+  public void process(AdviceScanResult scanResult, AdviceProcessorContext context) {
     InstrumenterModule module = context.getModule();
 
     Set<String> ignoredClasses = new HashSet<>(asList(module.muzzleIgnoredClassNames()));
@@ -35,6 +30,5 @@ public final class MuzzleGenerationProcessor implements AdviceProcessor<Referenc
     }
 
     MuzzleGenerator.generate(context.getTargetDirectory(), module, references);
-    return references.toArray(new Reference[0]);
   }
 }
