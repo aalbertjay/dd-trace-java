@@ -16,8 +16,9 @@ import datadog.trace.agent.tooling.advice.AdviceScanningFixtures.AdviceRoot;
 import datadog.trace.agent.tooling.advice.AdviceScanningFixtures.Dependency;
 import datadog.trace.agent.tooling.advice.AdviceScanningFixtures.ScanModule;
 import datadog.trace.instrumentation.testing.ExternalHelper;
-import java.io.InputStream;
+import java.io.IOException;
 import java.util.Arrays;
+import net.bytebuddy.dynamic.ClassFileLocator;
 import net.bytebuddy.jar.asm.ClassReader;
 import org.junit.jupiter.api.Test;
 
@@ -64,15 +65,20 @@ class AdviceScannerTest {
 
   @Test
   void skipsMissingTransitiveInstrumentationClasses() {
-    String missingResource = ExternalHelper.class.getName().replace('.', '/') + ".class";
-    ClassLoader loader =
-        new ClassLoader(getClass().getClassLoader()) {
+    ClassFileLocator delegate = ClassFileLocator.ForClassLoader.of(getClass().getClassLoader());
+    ClassFileLocator locator =
+        new ClassFileLocator() {
           @Override
-          public InputStream getResourceAsStream(String name) {
-            return missingResource.equals(name) ? null : super.getResourceAsStream(name);
+          public Resolution locate(String name) throws IOException {
+            return ExternalHelper.class.getName().equals(name)
+                ? new Resolution.Illegal(name)
+                : delegate.locate(name);
           }
+
+          @Override
+          public void close() {}
         };
-    AdviceScanResult result = AdviceScanner.scan(new ScanModule(), loader);
+    AdviceScanResult result = AdviceScanner.scan(new ScanModule(), locator);
 
     ClassInfo root = result.getClassInfo(AdviceRoot.class.getName());
     assertTrue(root.isScanned());

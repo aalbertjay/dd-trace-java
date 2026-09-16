@@ -12,8 +12,6 @@ import datadog.trace.agent.tooling.advice.AdviceScanResult.SourceLocation;
 import datadog.trace.agent.tooling.advice.AdviceScanResult.Usage;
 import datadog.trace.agent.tooling.advice.AdviceScanResult.UsageKind;
 import de.thetaphi.forbiddenapis.SuppressForbidden;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -22,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.bytebuddy.dynamic.ClassFileLocator;
 import net.bytebuddy.jar.asm.ClassReader;
 import net.bytebuddy.jar.asm.ClassVisitor;
 import net.bytebuddy.jar.asm.Handle;
@@ -35,23 +34,24 @@ public final class AdviceScanner {
   private static final int UNDEFINED_LINE = -1;
 
   private final InstrumenterModule module;
-  private final ClassLoader loader;
+  private final ClassFileLocator classFileLocator;
   private final LinkedHashSet<String> adviceRoots = new LinkedHashSet<>();
   private final LinkedHashMap<String, MutableClassInfo> classes = new LinkedHashMap<>();
   private final Deque<String> scanQueue = new ArrayDeque<>();
   private final Set<String> queued = new LinkedHashSet<>();
 
-  private AdviceScanner(InstrumenterModule module, ClassLoader loader) {
+  private AdviceScanner(InstrumenterModule module, ClassFileLocator classFileLocator) {
     this.module = module;
-    this.loader = loader;
+    this.classFileLocator = classFileLocator;
   }
 
   public static AdviceScanResult scan(InstrumenterModule module) {
-    return scan(module, Thread.currentThread().getContextClassLoader());
+    return scan(
+        module, ClassFileLocator.ForClassLoader.of(Thread.currentThread().getContextClassLoader()));
   }
 
-  static AdviceScanResult scan(InstrumenterModule module, ClassLoader loader) {
-    return new AdviceScanner(module, loader).scan();
+  static AdviceScanResult scan(InstrumenterModule module, ClassFileLocator classFileLocator) {
+    return new AdviceScanner(module, classFileLocator).scan();
   }
 
   private AdviceScanResult scan() {
@@ -150,14 +150,14 @@ public final class AdviceScanner {
   @SuppressForbidden
   private void scanClass(MutableClassInfo info) {
     String resource = info.className.replace('.', '/') + ".class";
-    InputStream input;
+    ClassFileLocator.Resolution resolution;
     try {
-      input = loader.getResourceAsStream(resource);
+      resolution = classFileLocator.locate(info.className);
     } catch (Throwable error) {
       throw scanFailure(
           info.className, owningAdvice(info.className), "cannot read class bytecode", error);
     }
-    if (input == null) {
+    if (!resolution.isResolved()) {
       if (adviceRoots.contains(info.className)) {
         throw scanFailure(
             info.className, owningAdvice(info.className), "advice class is missing", null);
@@ -165,12 +165,10 @@ public final class AdviceScanner {
       System.err.println(resource + " not found, skipping");
       return;
     }
-    try (InputStream classFile = input) {
-      new ClassReader(classFile).accept(new ScanningVisitor(info), ClassReader.SKIP_FRAMES);
+    try {
+      new ClassReader(resolution.resolve())
+          .accept(new ScanningVisitor(info), ClassReader.SKIP_FRAMES);
       info.scanned = true;
-    } catch (IOException error) {
-      throw scanFailure(
-          info.className, owningAdvice(info.className), "cannot read class bytecode", error);
     } catch (Throwable error) {
       throw scanFailure(
           info.className, owningAdvice(info.className), "cannot parse class bytecode", error);

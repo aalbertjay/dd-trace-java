@@ -54,7 +54,7 @@ public class AdviceScanningGradlePlugin extends Plugin.ForElementMatcher {
           "Cannot instantiate instrumenter module " + typeDescription.getName(), error);
     }
 
-    AdviceScanResult scanResult = AdviceScanner.scan(module);
+    AdviceScanResult scanResult = AdviceScanner.scan(module, classFileLocator);
     AdviceProcessorContext context = new AdviceProcessorContext(module, targetDirectory);
     for (AdviceProcessor<?> processor : processors) {
       runProcessor(processor, scanResult, context);
